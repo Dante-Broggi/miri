@@ -499,7 +499,7 @@ pub(super) trait EvalContextExt<'mir, 'tcx: 'mir>:
         atomic: AtomicReadOrd,
         latest_in_mo: Immediate<Provenance>,
         validate: impl FnOnce() -> InterpResult<'tcx>,
-    ) -> InterpResult<'tcx, Scalar<Provenance>> {
+    ) -> InterpResult<'tcx, Immediate<Provenance>> {
         let this = self.eval_context_ref();
         if let Some(global) = &this.machine.data_race {
             let (alloc_id, base_offset, ..) = this.ptr_get_alloc_id(place.ptr())?;
@@ -523,13 +523,13 @@ pub(super) trait EvalContextExt<'mir, 'tcx: 'mir>:
                     this.emit_diagnostic(NonHaltingDiagnostic::WeakMemoryOutdatedLoad);
                 }
 
-                return Ok(loaded);
+                return Ok(Immediate::Scalar(loaded));
             }
         }
 
         // Race detector or weak memory disabled, simply read the latest value
         validate()?;
-        Ok(latest_in_mo.to_scalar())
+        Ok(latest_in_mo)
     }
 
     fn buffered_atomic_write(

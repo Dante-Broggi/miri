@@ -561,12 +561,21 @@ impl MemoryCellClocks {
 /// Evaluation context extensions.
 impl<'mir, 'tcx: 'mir> EvalContextExt<'mir, 'tcx> for MiriInterpCx<'mir, 'tcx> {}
 pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
-    /// Perform an atomic read operation at the memory location.
+    /// Perform an atomic read operation at the scalar memory location.
     fn read_scalar_atomic(
         &self,
         place: &MPlaceTy<'tcx, Provenance>,
         atomic: AtomicReadOrd,
     ) -> InterpResult<'tcx, Scalar<Provenance>> {
+        Ok(self.read_atomic(place, atomic)?.to_scalar())
+    }
+
+    /// Perform an atomic read operation at the memory location.
+    fn read_atomic(
+        &self,
+        place: &MPlaceTy<'tcx, Provenance>,
+        atomic: AtomicReadOrd,
+    ) -> InterpResult<'tcx, Immediate<Provenance>> {
         let this = self.eval_context_ref();
         this.atomic_access_check(place, AtomicAccessType::Load(atomic))?;
         // This will read from the last store in the modification order of this location. In case
