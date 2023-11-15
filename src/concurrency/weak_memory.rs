@@ -497,7 +497,7 @@ pub(super) trait EvalContextExt<'mir, 'tcx: 'mir>:
         &self,
         place: &MPlaceTy<'tcx, Provenance>,
         atomic: AtomicReadOrd,
-        latest_in_mo: Scalar<Provenance>,
+        latest_in_mo: Immediate<Provenance>,
         validate: impl FnOnce() -> InterpResult<'tcx>,
     ) -> InterpResult<'tcx, Scalar<Provenance>> {
         let this = self.eval_context_ref();
@@ -510,7 +510,7 @@ pub(super) trait EvalContextExt<'mir, 'tcx: 'mir>:
                 let mut rng = this.machine.rng.borrow_mut();
                 let buffer = alloc_buffers.get_or_create_store_buffer(
                     alloc_range(base_offset, place.layout.size),
-                    latest_in_mo,
+                    latest_in_mo.to_scalar(),
                 )?;
                 let (loaded, recency) = buffer.buffered_read(
                     global,
@@ -529,7 +529,7 @@ pub(super) trait EvalContextExt<'mir, 'tcx: 'mir>:
 
         // Race detector or weak memory disabled, simply read the latest value
         validate()?;
-        Ok(latest_in_mo)
+        Ok(latest_in_mo.to_scalar())
     }
 
     fn buffered_atomic_write(

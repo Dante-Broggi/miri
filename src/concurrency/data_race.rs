@@ -574,8 +574,8 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
         // This is fine with StackedBorrow and race checks because they don't concern metadata on
         // the *value* (including the associated provenance if this is an AtomicPtr) at this location.
         // Only metadata on the location itself is used.
-        let scalar = this.allow_data_races_ref(move |this| this.read_scalar(place))?;
-        this.buffered_atomic_read(place, atomic, scalar, || {
+        let immediate = *(this.allow_data_races_ref(move |this| this.read_immediate(place))?);
+        this.buffered_atomic_read(place, atomic, immediate, || {
             this.validate_atomic_load(place, atomic)
         })
     }
