@@ -120,11 +120,13 @@ impl VisitProvenance for StoreBufferAlloc {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(super) struct StoreBuffer {
     // Stores to this location in modification order
     buffer: VecDeque<StoreElement>,
 }
+
+// impl Eq for StoreBuffer {}
 
 /// Whether a load returned the latest value or not.
 #[derive(PartialEq, Eq)]
@@ -133,7 +135,7 @@ enum LoadRecency {
     Outdated,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 struct StoreElement {
     /// The identifier of the vector index, corresponding to a thread
     /// that performed the store.
@@ -148,11 +150,30 @@ struct StoreElement {
     // FIXME: this means the store must be fully initialized;
     // we will have to change this if we want to support atomics on
     // (partially) uninitialized data.
-    val: Scalar<Provenance>,
+    val: Immediate<Provenance>,
 
     /// Metadata about loads from this store element,
     /// behind a RefCell to keep load op take &self
     load_info: RefCell<LoadInfo>,
+}
+
+// impl Eq for StoreElement {}
+
+impl PartialEq for StoreElement {
+    fn eq(&self, other: &Self) -> bool {
+        let v = self.store_index == other.store_index
+            && self.is_seqcst == other.is_seqcst
+            && self.timestamp == other.timestamp
+            && self.load_info == other.load_info;
+        if v {
+            match (self.val, other.val) {
+                (Immediate::Scalar(lhs), Immediate::Scalar(rhs)) => lhs == rhs,
+                _ => bug!("Bad immediate comparison - scalars expected"),
+            }
+        } else {
+            false
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -253,7 +274,7 @@ impl<'mir, 'tcx: 'mir> StoreBuffer {
             // are never meaningfully used, so it's fine to leave them as 0
             store_index: VectorIdx::from(0),
             timestamp: VTimestamp::ZERO,
-            val: init,
+            val: Immediate::Scalar(init),
             is_seqcst: false,
             load_info: RefCell::new(LoadInfo::default()),
         };
@@ -420,7 +441,7 @@ impl<'mir, 'tcx: 'mir> StoreBuffer {
             // non-atomic memory location.
             // But we already have the immediate value here so we don't need to do the memory
             // access
-            val,
+            val: Immediate::Scalar(val),
             is_seqcst,
             load_info: RefCell::new(LoadInfo::default()),
         };
@@ -459,7 +480,7 @@ impl StoreElement {
         let mut load_info = self.load_info.borrow_mut();
         load_info.sc_loaded |= is_seqcst;
         let _ = load_info.timestamps.try_insert(index, clocks.clock[index]);
-        self.val
+        self.val.to_scalar()
     }
 }
 
