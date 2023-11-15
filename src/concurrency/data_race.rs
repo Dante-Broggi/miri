@@ -630,7 +630,7 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
 
         this.validate_atomic_rmw(place, atomic)?;
 
-        this.buffered_atomic_rmw(val.to_scalar(), place, atomic, old.to_scalar())?;
+        this.buffered_atomic_rmw(*val, place, atomic, *old)?;
         Ok(old)
     }
 
@@ -650,7 +650,7 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
 
         this.validate_atomic_rmw(place, atomic)?;
 
-        this.buffered_atomic_rmw(new, place, atomic, old)?;
+        this.buffered_atomic_rmw(Immediate::Scalar(new), place, atomic, Immediate::Scalar(old))?;
         Ok(old)
     }
 
@@ -680,7 +680,7 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
 
         this.validate_atomic_rmw(place, atomic)?;
 
-        this.buffered_atomic_rmw(new_val.to_scalar(), place, atomic, old.to_scalar())?;
+        this.buffered_atomic_rmw(**new_val, place, atomic, *old)?;
 
         // Return the old value.
         Ok(old)
@@ -729,7 +729,7 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
         if cmpxchg_success {
             this.allow_data_races_mut(|this| this.write_scalar(new, place))?;
             this.validate_atomic_rmw(place, success)?;
-            this.buffered_atomic_rmw(new, place, success, old.to_scalar())?;
+            this.buffered_atomic_rmw(Immediate::Scalar(new), place, success, *old)?;
         } else {
             this.validate_atomic_load(place, fail)?;
             // A failed compare exchange is equivalent to a load, reading from the latest store

@@ -218,7 +218,7 @@ impl StoreBufferAlloc {
     fn get_or_create_store_buffer<'tcx>(
         &self,
         range: AllocRange,
-        init: Scalar<Provenance>,
+        init: Immediate<Provenance>,
     ) -> InterpResult<'tcx, Ref<'_, StoreBuffer>> {
         let access_type = self.store_buffers.borrow().access_type(range);
         let pos = match access_type {
@@ -243,7 +243,7 @@ impl StoreBufferAlloc {
     fn get_or_create_store_buffer_mut<'tcx>(
         &mut self,
         range: AllocRange,
-        init: Scalar<Provenance>,
+        init: Immediate<Provenance>,
     ) -> InterpResult<'tcx, &mut StoreBuffer> {
         let buffers = self.store_buffers.get_mut();
         let access_type = buffers.access_type(range);
@@ -265,7 +265,7 @@ impl StoreBufferAlloc {
 }
 
 impl<'mir, 'tcx: 'mir> StoreBuffer {
-    fn new(init: Scalar<Provenance>) -> Self {
+    fn new(init: Immediate<Provenance>) -> Self {
         let mut buffer = VecDeque::new();
         buffer.reserve(STORE_BUFFER_LIMIT);
         let mut ret = Self { buffer };
@@ -274,7 +274,7 @@ impl<'mir, 'tcx: 'mir> StoreBuffer {
             // are never meaningfully used, so it's fine to leave them as 0
             store_index: VectorIdx::from(0),
             timestamp: VTimestamp::ZERO,
-            val: Immediate::Scalar(init),
+            val: init,
             is_seqcst: false,
             load_info: RefCell::new(LoadInfo::default()),
         };
@@ -303,7 +303,7 @@ impl<'mir, 'tcx: 'mir> StoreBuffer {
         is_seqcst: bool,
         rng: &mut (impl rand::Rng + ?Sized),
         validate: impl FnOnce() -> InterpResult<'tcx>,
-    ) -> InterpResult<'tcx, (Scalar<Provenance>, LoadRecency)> {
+    ) -> InterpResult<'tcx, (Immediate<Provenance>, LoadRecency)> {
         // Having a live borrow to store_buffer while calling validate_atomic_load is fine
         // because the race detector doesn't touch store_buffer
 
@@ -328,7 +328,7 @@ impl<'mir, 'tcx: 'mir> StoreBuffer {
 
     fn buffered_write(
         &mut self,
-        val: Scalar<Provenance>,
+        val: Immediate<Provenance>,
         global: &DataRaceState,
         thread_mgr: &ThreadManager<'_, '_>,
         is_seqcst: bool,
@@ -429,7 +429,7 @@ impl<'mir, 'tcx: 'mir> StoreBuffer {
     /// ATOMIC STORE IMPL in the paper (except we don't need the location's vector clock)
     fn store_impl(
         &mut self,
-        val: Scalar<Provenance>,
+        val: Immediate<Provenance>,
         index: VectorIdx,
         thread_clock: &VClock,
         is_seqcst: bool,
@@ -441,7 +441,7 @@ impl<'mir, 'tcx: 'mir> StoreBuffer {
             // non-atomic memory location.
             // But we already have the immediate value here so we don't need to do the memory
             // access
-            val: Immediate::Scalar(val),
+            val,
             is_seqcst,
             load_info: RefCell::new(LoadInfo::default()),
         };
@@ -476,11 +476,11 @@ impl StoreElement {
         index: VectorIdx,
         clocks: &ThreadClockSet,
         is_seqcst: bool,
-    ) -> Scalar<Provenance> {
+    ) -> Immediate<Provenance> {
         let mut load_info = self.load_info.borrow_mut();
         load_info.sc_loaded |= is_seqcst;
         let _ = load_info.timestamps.try_insert(index, clocks.clock[index]);
-        self.val.to_scalar()
+        self.val
     }
 }
 
@@ -490,10 +490,10 @@ pub(super) trait EvalContextExt<'mir, 'tcx: 'mir>:
 {
     fn buffered_atomic_rmw(
         &mut self,
-        new_val: Scalar<Provenance>,
+        new_val: Immediate<Provenance>,
         place: &MPlaceTy<'tcx, Provenance>,
         atomic: AtomicRwOrd,
-        init: Scalar<Provenance>,
+        init: Immediate<Provenance>,
     ) -> InterpResult<'tcx> {
         let this = self.eval_context_mut();
         let (alloc_id, base_offset, ..) = this.ptr_get_alloc_id(place.ptr())?;
@@ -531,7 +531,7 @@ pub(super) trait EvalContextExt<'mir, 'tcx: 'mir>:
                 let mut rng = this.machine.rng.borrow_mut();
                 let buffer = alloc_buffers.get_or_create_store_buffer(
                     alloc_range(base_offset, place.layout.size),
-                    latest_in_mo.to_scalar(),
+                    latest_in_mo,
                 )?;
                 let (loaded, recency) = buffer.buffered_read(
                     global,
@@ -544,7 +544,7 @@ pub(super) trait EvalContextExt<'mir, 'tcx: 'mir>:
                     this.emit_diagnostic(NonHaltingDiagnostic::WeakMemoryOutdatedLoad);
                 }
 
-                return Ok(Immediate::Scalar(loaded));
+                return Ok(loaded);
             }
         }
 
@@ -582,13 +582,20 @@ pub(super) trait EvalContextExt<'mir, 'tcx: 'mir>:
                     .access_type(alloc_range(base_offset, dest.layout.size)),
                 AccessType::Empty(_)
             );
-            let buffer = alloc_buffers
-                .get_or_create_store_buffer_mut(alloc_range(base_offset, dest.layout.size), init)?;
+            let buffer = alloc_buffers.get_or_create_store_buffer_mut(
+                alloc_range(base_offset, dest.layout.size),
+                Immediate::Scalar(init),
+            )?;
             if was_empty {
                 buffer.buffer.pop_front();
             }
 
-            buffer.buffered_write(val, global, threads, atomic == AtomicWriteOrd::SeqCst)?;
+            buffer.buffered_write(
+                Immediate::Scalar(val),
+                global,
+                threads,
+                atomic == AtomicWriteOrd::SeqCst,
+            )?;
         }
 
         // Caller should've written to dest with the vanilla scalar write, we do nothing here
@@ -613,8 +620,10 @@ pub(super) trait EvalContextExt<'mir, 'tcx: 'mir>:
             let size = place.layout.size;
             let (alloc_id, base_offset, ..) = this.ptr_get_alloc_id(place.ptr())?;
             if let Some(alloc_buffers) = this.get_alloc_extra(alloc_id)?.weak_memory.as_ref() {
-                let buffer = alloc_buffers
-                    .get_or_create_store_buffer(alloc_range(base_offset, size), init)?;
+                let buffer = alloc_buffers.get_or_create_store_buffer(
+                    alloc_range(base_offset, size),
+                    Immediate::Scalar(init),
+                )?;
                 buffer.read_from_last_store(
                     global,
                     &this.machine.threads,
