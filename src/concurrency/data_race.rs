@@ -606,7 +606,7 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
         // the store buffer with the value currently being written
         // ONCE this is fixed please remove the hack in buffered_atomic_write() in weak_memory.rs
         // https://github.com/rust-lang/miri/issues/2164
-        this.buffered_atomic_write(val, dest, atomic, val)
+        this.buffered_atomic_write(Immediate::Scalar(val), dest, atomic, Immediate::Scalar(val))
     }
 
     /// Perform an atomic RMW operation on a memory location.
@@ -639,18 +639,18 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
     fn atomic_exchange_scalar(
         &mut self,
         place: &MPlaceTy<'tcx, Provenance>,
-        new: Scalar<Provenance>,
+        new: Immediate<Provenance>,
         atomic: AtomicRwOrd,
     ) -> InterpResult<'tcx, Scalar<Provenance>> {
         let this = self.eval_context_mut();
         this.atomic_access_check(place, AtomicAccessType::Rmw)?;
 
         let old = this.allow_data_races_mut(|this| this.read_scalar(place))?;
-        this.allow_data_races_mut(|this| this.write_scalar(new, place))?;
+        this.allow_data_races_mut(|this| this.write_immediate(new, place))?;
 
         this.validate_atomic_rmw(place, atomic)?;
 
-        this.buffered_atomic_rmw(Immediate::Scalar(new), place, atomic, Immediate::Scalar(old))?;
+        this.buffered_atomic_rmw(new, place, atomic, Immediate::Scalar(old))?;
         Ok(old)
     }
 
@@ -736,7 +736,7 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
             // in the modification order.
             // Since `old` is only a value and not the store element, we need to separately
             // find it in our store buffer and perform load_impl on it.
-            this.perform_read_on_buffered_latest(place, fail, old.to_scalar())?;
+            this.perform_read_on_buffered_latest(place, fail, *old)?;
         }
 
         // Return the old value.

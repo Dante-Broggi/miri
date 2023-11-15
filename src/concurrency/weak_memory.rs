@@ -555,10 +555,10 @@ pub(super) trait EvalContextExt<'mir, 'tcx: 'mir>:
 
     fn buffered_atomic_write(
         &mut self,
-        val: Scalar<Provenance>,
+        val: Immediate<Provenance>,
         dest: &MPlaceTy<'tcx, Provenance>,
         atomic: AtomicWriteOrd,
-        init: Scalar<Provenance>,
+        init: Immediate<Provenance>,
     ) -> InterpResult<'tcx> {
         let this = self.eval_context_mut();
         let (alloc_id, base_offset, ..) = this.ptr_get_alloc_id(dest.ptr())?;
@@ -582,20 +582,13 @@ pub(super) trait EvalContextExt<'mir, 'tcx: 'mir>:
                     .access_type(alloc_range(base_offset, dest.layout.size)),
                 AccessType::Empty(_)
             );
-            let buffer = alloc_buffers.get_or_create_store_buffer_mut(
-                alloc_range(base_offset, dest.layout.size),
-                Immediate::Scalar(init),
-            )?;
+            let buffer = alloc_buffers
+                .get_or_create_store_buffer_mut(alloc_range(base_offset, dest.layout.size), init)?;
             if was_empty {
                 buffer.buffer.pop_front();
             }
 
-            buffer.buffered_write(
-                Immediate::Scalar(val),
-                global,
-                threads,
-                atomic == AtomicWriteOrd::SeqCst,
-            )?;
+            buffer.buffered_write(val, global, threads, atomic == AtomicWriteOrd::SeqCst)?;
         }
 
         // Caller should've written to dest with the vanilla scalar write, we do nothing here
@@ -609,7 +602,7 @@ pub(super) trait EvalContextExt<'mir, 'tcx: 'mir>:
         &self,
         place: &MPlaceTy<'tcx, Provenance>,
         atomic: AtomicReadOrd,
-        init: Scalar<Provenance>,
+        init: Immediate<Provenance>,
     ) -> InterpResult<'tcx> {
         let this = self.eval_context_ref();
 
@@ -620,10 +613,8 @@ pub(super) trait EvalContextExt<'mir, 'tcx: 'mir>:
             let size = place.layout.size;
             let (alloc_id, base_offset, ..) = this.ptr_get_alloc_id(place.ptr())?;
             if let Some(alloc_buffers) = this.get_alloc_extra(alloc_id)?.weak_memory.as_ref() {
-                let buffer = alloc_buffers.get_or_create_store_buffer(
-                    alloc_range(base_offset, size),
-                    Immediate::Scalar(init),
-                )?;
+                let buffer = alloc_buffers
+                    .get_or_create_store_buffer(alloc_range(base_offset, size), init)?;
                 buffer.read_from_last_store(
                     global,
                     &this.machine.threads,
