@@ -150,9 +150,9 @@ trait EvalContextPrivExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
         let place = this.deref_pointer(place)?;
 
         // Perform regular load.
-        let val = this.read_scalar(val)?;
+        let val = this.read_immediate(val)?;
         // Perform atomic store
-        this.write_scalar_atomic(val, &place, atomic)?;
+        this.write_atomic(*val, &place, atomic)?;
         Ok(())
     }
 

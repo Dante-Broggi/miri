@@ -562,6 +562,7 @@ impl MemoryCellClocks {
 impl<'mir, 'tcx: 'mir> EvalContextExt<'mir, 'tcx> for MiriInterpCx<'mir, 'tcx> {}
 pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
     /// Perform an atomic read operation at the scalar memory location.
+    #[track_caller]
     fn read_scalar_atomic(
         &self,
         place: &MPlaceTy<'tcx, Provenance>,
@@ -588,25 +589,34 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
             this.validate_atomic_load(place, atomic)
         })
     }
-
-    /// Perform an atomic write operation at the memory location.
+    /// Perform an atomic write operation at the scalar memory location.
     fn write_scalar_atomic(
         &mut self,
         val: Scalar<Provenance>,
         dest: &MPlaceTy<'tcx, Provenance>,
         atomic: AtomicWriteOrd,
     ) -> InterpResult<'tcx> {
+        self.write_atomic(Immediate::Scalar(val), dest, atomic)
+    }
+
+    /// Perform an atomic write operation at the scalar memory location.
+    fn write_atomic(
+        &mut self,
+        val: Immediate<Provenance>,
+        dest: &MPlaceTy<'tcx, Provenance>,
+        atomic: AtomicWriteOrd,
+    ) -> InterpResult<'tcx> {
         let this = self.eval_context_mut();
         this.atomic_access_check(dest, AtomicAccessType::Store)?;
 
-        this.allow_data_races_mut(move |this| this.write_scalar(val, dest))?;
+        this.allow_data_races_mut(move |this| this.write_immediate(val, dest))?;
         this.validate_atomic_store(dest, atomic)?;
         // FIXME: it's not possible to get the value before write_scalar. A read_scalar will cause
         // side effects from a read the program did not perform. So we have to initialise
         // the store buffer with the value currently being written
         // ONCE this is fixed please remove the hack in buffered_atomic_write() in weak_memory.rs
         // https://github.com/rust-lang/miri/issues/2164
-        this.buffered_atomic_write(Immediate::Scalar(val), dest, atomic, Immediate::Scalar(val))
+        this.buffered_atomic_write(val, dest, atomic, val)
     }
 
     /// Perform an atomic RMW operation on a memory location.
