@@ -696,7 +696,7 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
         Ok(old)
     }
 
-    /// Perform an atomic compare and exchange at a given memory location.
+    /// Perform an atomic compare and exchange at a given scalar memory location.
     /// On success an atomic RMW operation is performed and on failure
     /// only an atomic read occurs. If `can_fail_spuriously` is true,
     /// then we treat it as a "compare_exchange_weak" operation, and
@@ -711,6 +711,39 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
         fail: AtomicReadOrd,
         can_fail_spuriously: bool,
     ) -> InterpResult<'tcx, Immediate<Provenance>> {
+        match self.atomic_compare_exchange_immediate(
+            place,
+            expect_old,
+            new.into(),
+            success,
+            fail,
+            can_fail_spuriously,
+        )? {
+            (Immediate::Scalar(p), b) => Ok(Immediate::ScalarPair(p, b)),
+            (Immediate::ScalarPair(p, q), b) => {
+                bug!("expected scalar pair, not triple: ({:?},{:?},{:?})", p, q, b);
+            }
+            (p @ Immediate::Uninit, b) => {
+                bug!("expected scalar pair, not uninit: ({:?},{:?})", p, b);
+            }
+        }
+    }
+
+    /// Perform an atomic compare and exchange at a given memory location.
+    /// On success an atomic RMW operation is performed and on failure
+    /// only an atomic read occurs. If `can_fail_spuriously` is true,
+    /// then we treat it as a "compare_exchange_weak" operation, and
+    /// some portion of the time fail even when the values are actually
+    /// identical.
+    fn atomic_compare_exchange_immediate(
+        &mut self,
+        place: &MPlaceTy<'tcx, Provenance>,
+        expect_old: &ImmTy<'tcx, Provenance>,
+        new: Immediate<Provenance>,
+        success: AtomicRwOrd,
+        fail: AtomicReadOrd,
+        can_fail_spuriously: bool,
+    ) -> InterpResult<'tcx, (Immediate<Provenance>, Scalar<Provenance>)> {
         use rand::Rng as _;
         let this = self.eval_context_mut();
         this.atomic_access_check(place, AtomicAccessType::Rmw)?;
@@ -731,15 +764,13 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
             } else {
                 true
             };
-        let res = Immediate::ScalarPair(old.to_scalar(), Scalar::from_bool(cmpxchg_success));
-
         // Update ptr depending on comparison.
         // if successful, perform a full rw-atomic validation
         // otherwise treat this as an atomic load with the fail ordering.
         if cmpxchg_success {
-            this.allow_data_races_mut(|this| this.write_scalar(new, place))?;
+            this.allow_data_races_mut(|this| this.write_immediate(new, place))?;
             this.validate_atomic_rmw(place, success)?;
-            this.buffered_atomic_rmw(Immediate::Scalar(new), place, success, *old)?;
+            this.buffered_atomic_rmw(new, place, success, *old)?;
         } else {
             this.validate_atomic_load(place, fail)?;
             // A failed compare exchange is equivalent to a load, reading from the latest store
@@ -750,7 +781,7 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
         }
 
         // Return the old value.
-        Ok(res)
+        Ok((*old, Scalar::from_bool(cmpxchg_success)))
     }
 
     /// Update the data-race detector for an atomic fence on the current thread.

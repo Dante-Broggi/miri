@@ -250,12 +250,12 @@ trait EvalContextPrivExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
         let [place, expect_old, new] = check_arg_count(args)?;
         let place = this.deref_pointer(place)?;
         let expect_old = this.read_immediate(expect_old)?; // read as immediate for the sake of `binary_op()`
-        let new = this.read_scalar(new)?;
+        let new = this.read_immediate(new)?;
 
         let old = this.atomic_compare_exchange_scalar(
             &place,
             &expect_old,
-            new,
+            new.to_scalar(),
             success,
             fail,
             can_fail_spuriously,
