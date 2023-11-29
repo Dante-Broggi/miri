@@ -251,8 +251,8 @@ trait EvalContextPrivExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
         let place = this.deref_pointer(place)?;
         let expect_old = this.read_immediate(expect_old)?; // read as immediate for the sake of `binary_op()`
         let new = this.read_immediate(new)?;
-
-        let old = this.atomic_compare_exchange_scalar(
+        dbg!(&place, &expect_old, &new);
+        let cas = this.atomic_compare_exchange_immediate(
             &place,
             &expect_old,
             *new,
@@ -262,7 +262,17 @@ trait EvalContextPrivExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
         )?;
 
         // Return old value.
-        this.write_immediate(old, dest)?;
+        match cas {
+            (Immediate::Scalar(p), b) => {
+                this.write_immediate(Immediate::ScalarPair(p, b), dest)?;
+            }
+            (Immediate::ScalarPair(p, q), b) => {
+                bug!("expected scalar pair, not triple: ({:?},{:?},{:?})", p, q, b);
+            }
+            (p @ Immediate::Uninit, b) => {
+                bug!("expected scalar pair, not uninit: ({:?},{:?})", p, b);
+            }
+        }
         Ok(())
     }
 
