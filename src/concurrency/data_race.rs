@@ -744,6 +744,7 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
         fail: AtomicReadOrd,
         can_fail_spuriously: bool,
     ) -> InterpResult<'tcx, (Immediate<Provenance>, Scalar<Provenance>)> {
+        dbg!(place, expect_old, new, success, fail);
         use rand::Rng as _;
         let this = self.eval_context_mut();
         this.atomic_access_check(place, AtomicAccessType::Rmw)?;
@@ -779,6 +780,7 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
             // find it in our store buffer and perform load_impl on it.
             this.perform_read_on_buffered_latest(place, fail, *old)?;
         }
+        dbg!(&old, eq, cmpxchg_success, place, expect_old, new, success, fail);
 
         // Return the old value.
         Ok((*old, Scalar::from_bool(cmpxchg_success)))

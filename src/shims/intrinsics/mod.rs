@@ -35,6 +35,7 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: crate::MiriInterpCxExt<'mir, 'tcx> {
         }
         let intrinsic_name = this.tcx.item_name(instance.def_id());
         let intrinsic_name = intrinsic_name.as_str();
+        dbg!(intrinsic_name);
 
         // Handle intrinsics without return place.
         match intrinsic_name {

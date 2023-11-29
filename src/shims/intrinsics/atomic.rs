@@ -21,6 +21,7 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: crate::MiriInterpCxExt<'mir, 'tcx> {
         dest: &PlaceTy<'tcx, Provenance>,
     ) -> InterpResult<'tcx> {
         let this = self.eval_context_mut();
+        dbg!(intrinsic_name);
 
         let intrinsic_structure: Vec<_> = intrinsic_name.split('_').collect();
 
@@ -246,6 +247,7 @@ trait EvalContextPrivExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
         can_fail_spuriously: bool,
     ) -> InterpResult<'tcx> {
         let this = self.eval_context_mut();
+        dbg!(args, dest);
 
         let [place, expect_old, new] = check_arg_count(args)?;
         let place = this.deref_pointer(place)?;
@@ -283,7 +285,8 @@ trait EvalContextPrivExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
         success: AtomicRwOrd,
         fail: AtomicReadOrd,
     ) -> InterpResult<'tcx> {
-        self.atomic_compare_exchange_impl(args, dest, success, fail, false)
+        let tmp = self.atomic_compare_exchange_impl(args, dest, success, fail, false);
+        dbg!(tmp)
     }
 
     fn atomic_compare_exchange_weak(
@@ -293,6 +296,7 @@ trait EvalContextPrivExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
         success: AtomicRwOrd,
         fail: AtomicReadOrd,
     ) -> InterpResult<'tcx> {
-        self.atomic_compare_exchange_impl(args, dest, success, fail, true)
+        let tmp = self.atomic_compare_exchange_impl(args, dest, success, fail, true);
+        dbg!(tmp)
     }
 }
