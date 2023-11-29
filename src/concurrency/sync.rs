@@ -211,7 +211,7 @@ pub(super) trait EvalContextExtPriv<'mir, 'tcx: 'mir>:
             .atomic_compare_exchange_scalar(
                 &value_place,
                 &ImmTy::from_uint(0u32, this.machine.layouts.u32),
-                Scalar::from_u32(next_id.to_u32()),
+                Scalar::from_u32(next_id.to_u32()).into(),
                 AtomicRwOrd::Relaxed, // deliberately *no* synchronization
                 AtomicReadOrd::Relaxed,
                 false,

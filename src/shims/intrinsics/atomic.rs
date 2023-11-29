@@ -255,7 +255,7 @@ trait EvalContextPrivExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
         let old = this.atomic_compare_exchange_scalar(
             &place,
             &expect_old,
-            new.to_scalar(),
+            *new,
             success,
             fail,
             can_fail_spuriously,

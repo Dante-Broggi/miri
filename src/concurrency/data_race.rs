@@ -706,7 +706,7 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
         &mut self,
         place: &MPlaceTy<'tcx, Provenance>,
         expect_old: &ImmTy<'tcx, Provenance>,
-        new: Scalar<Provenance>,
+        new: Immediate<Provenance>,
         success: AtomicRwOrd,
         fail: AtomicReadOrd,
         can_fail_spuriously: bool,
@@ -714,7 +714,7 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
         match self.atomic_compare_exchange_immediate(
             place,
             expect_old,
-            new.into(),
+            new,
             success,
             fail,
             can_fail_spuriously,
