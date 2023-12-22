@@ -1,3 +1,5 @@
+use rustc_const_eval::interpret::Operand;
+use rustc_index::IndexSlice;
 use rustc_middle::{mir, mir::BinOp, ty};
 
 use crate::*;
@@ -269,7 +271,10 @@ trait EvalContextPrivExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
                 this.write_immediate(Immediate::ScalarPair(p, b), dest)?;
             }
             (Immediate::ScalarPair(p, q), b) => {
-                bug!("expected scalar pair, not triple: ({:?},{:?},{:?})", p, q, b);
+                let operands =
+                    [Operand::Immediate(Immediate::ScalarPair(p, q)), Operand::Immediate(b)];
+                let operands = IndexSlice::from_raw(operands);
+                self.eval_context_mut().write_aggregate(mir::AggregateKind::Tuple, operands, dest);
             }
             (p @ Immediate::Uninit, b) => {
                 bug!("expected scalar pair, not uninit: ({:?},{:?})", p, b);
