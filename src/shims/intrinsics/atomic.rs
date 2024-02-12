@@ -232,8 +232,8 @@ trait EvalContextPrivExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
         let place = this.deref_pointer(place)?;
         let new = this.read_immediate(new)?;
 
-        let old = this.atomic_exchange_scalar(&place, *new, atomic)?;
-        this.write_scalar(old, dest)?; // old value is returned
+        let old = this.atomic_exchange_immediate(&place, *new, atomic)?;
+        this.write_immediate(old, dest)?; // old value is returned
         Ok(())
     }
 

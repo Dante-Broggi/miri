@@ -645,23 +645,23 @@ pub trait EvalContextExt<'mir, 'tcx: 'mir>: MiriInterpCxExt<'mir, 'tcx> {
     }
 
     /// Perform an atomic exchange with a memory place and a new
-    /// scalar value, the old value is returned.
-    fn atomic_exchange_scalar(
+    /// immediate value, the old value is returned.
+    fn atomic_exchange_immediate(
         &mut self,
         place: &MPlaceTy<'tcx, Provenance>,
         new: Immediate<Provenance>,
         atomic: AtomicRwOrd,
-    ) -> InterpResult<'tcx, Scalar<Provenance>> {
+    ) -> InterpResult<'tcx, Immediate<Provenance>> {
         let this = self.eval_context_mut();
         this.atomic_access_check(place, AtomicAccessType::Rmw)?;
 
-        let old = this.allow_data_races_mut(|this| this.read_scalar(place))?;
+        let old = this.allow_data_races_mut(|this| this.read_immediate(place))?;
         this.allow_data_races_mut(|this| this.write_immediate(new, place))?;
 
         this.validate_atomic_rmw(place, atomic)?;
 
-        this.buffered_atomic_rmw(new, place, atomic, Immediate::Scalar(old))?;
-        Ok(old)
+        this.buffered_atomic_rmw(new, place, atomic, *old)?;
+        Ok(*old)
     }
 
     /// Perform an conditional atomic exchange with a memory place and a new
